@@ -46,8 +46,8 @@ const MOCK_PRICES = {
 const APP_CONFIG = {
   collectionName: 'participants',
   deadlineDay: 0, // Sunday (0 = Sunday, 1 = Monday, etc.)
-  deadlineHour: 0, // 12:00 AM
-  deadlineMinute: 0,
+  deadlineHour: 23, // 11:00 PM (23 in 24-hour format)
+  deadlineMinute: 59,
   referenceDay: 5, // Friday (for last Friday price)
   maxNameLength: 50,
   maxSymbolLength: 20,
