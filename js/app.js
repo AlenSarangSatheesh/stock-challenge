@@ -120,12 +120,7 @@
    * Check if deadline has passed (Sunday 12:00 AM)
    */
   function isDeadlinePassed() {
-    const now = new Date();
-    const lastFriday = getLastFriday();
-    const deadline = new Date(lastFriday);
-    deadline.setDate(deadline.getDate() + 2); // Sunday
-    deadline.setHours(APP_CONFIG.deadlineHour, APP_CONFIG.deadlineMinute, 0, 0);
-    return now > deadline;
+  return false; // Temporarily disabled for testing
   }
 
   /**
