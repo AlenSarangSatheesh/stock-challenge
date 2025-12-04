@@ -120,30 +120,7 @@
     });
   }
 
-  /**
-   * Initialize application
-   */
-  async function init() {
-    console.log('🚀 Initializing Stock Challenge...');
-
-    UIManager.initElements();
-
-    const firebaseReady = FirebaseService.init();
-
-    if (!firebaseReady) {
-      UIManager.showError('Failed to connect to database. Please refresh the page.');
-      return;
-    }
-
-    loadMyEntry();
-    setupEventListeners();
-    setupStockAutocomplete(); // Add this line
-
-    await loadParticipants();
-    subscribeToUpdates();
-
-    console.log('✅ Application initialized');
-  }
+  
 
   /**
    * Load user's entry from localStorage
@@ -236,41 +213,61 @@
   /**
    * Handle form submission (new entry or update)
    */
+  /**
+ * Handle form submission (new entry or update)
+ * UPDATED: Accepts stock symbols in any case (lowercase, uppercase, mixed)
+ */
   async function handleFormSubmit(event) {
     event.preventDefault();
     UIManager.hideError();
-    
-    const { name, symbol, exchange } = UIManager.getFormValues();
-    
+
+    // Get form values and normalize symbol to UPPERCASE
+    const formValues = UIManager.getFormValues();
+    const name = formValues.name;
+    const symbol = formValues.symbol.toUpperCase().trim(); // Convert to uppercase
+    const exchange = formValues.exchange;
+
     // Validation
     if (!name || !symbol) {
       UIManager.showError('Please fill all fields');
       return;
     }
-    
-    if (isDeadlinePassed()) {
-      UIManager.showError('Deadline has passed! Cannot submit entries after Sunday 12:00 AM');
+
+    // Validate symbol format (letters, numbers, & and - only)
+    const symbolRegex = /^[A-Z0-9&\-]+$/;
+    if (!symbolRegex.test(symbol)) {
+      UIManager.showError('Stock symbol can only contain letters, numbers, & and -');
       return;
     }
-    
+
+    if (isDeadlinePassed()) {
+      UIManager.showError('Deadline has passed! Cannot submit entries after Sunday 11:59 PM');
+      return;
+    }
+
     try {
       UIManager.setButtonLoading(UIManager.elements.submitBtn, true);
-      
-      // Check if symbol is already taken
+
+      // Check if symbol is already taken (case-insensitive comparison)
       const symbolTaken = await FirebaseService.isSymbolTaken(symbol, myEntry?.id);
       if (symbolTaken) {
-        UIManager.showError('This stock symbol is already taken by another participant');
+        UIManager.showError(`Stock symbol ${symbol} is already taken by another participant`);
         return;
       }
-      
-      // Fetch stock price
-      // Fetch REAL stock price - no mock data
+
+      // Fetch REAL stock price
       let price;
       try {
+        UIManager.showSuccess(`Fetching price for ${symbol}...`);
         price = await fetchStockPrice(symbol, exchange);
         console.log(`✅ Successfully fetched price: ₹${price}`);
       } catch (error) {
-        UIManager.showError(`Failed to fetch real price for ${symbol}. Please verify the stock symbol is correct and listed on ${exchange}.`);
+        UIManager.showError(
+          `Failed to fetch price for ${symbol} on ${exchange}. ` +
+          `Please verify: 1) Symbol is correct (e.g., RELIANCE, TCS, INFY) ` +
+          `2) Stock is listed on ${exchange} ` +
+          `3) Market might be closed`
+        );
         return;
       }
 
@@ -279,40 +276,40 @@
         UIManager.showError(`Invalid price returned for ${symbol}. Please try a different stock.`);
         return;
       }
-      
+
       if (isEditing && myEntry) {
         // Update existing entry
         await FirebaseService.updateParticipant(myEntry.id, {
           name,
-          symbol,
+          symbol, // Already uppercase
           exchange,
           lastFridayPrice: price,
           cmp: price,
           change: 0
         });
-        
+
         saveMyEntry({ id: myEntry.id, name, symbol });
-        UIManager.showSuccess('Entry updated successfully!');
+        UIManager.showSuccess(`Entry updated! ${symbol} @ ₹${price}`);
       } else {
         // Create new entry
         const newParticipant = await FirebaseService.addParticipant({
           name,
-          symbol,
+          symbol, // Already uppercase
           exchange,
           lastFridayPrice: price,
           cmp: price,
           change: 0,
           rank: 0
         });
-        
+
         saveMyEntry({ id: newParticipant.id, name, symbol });
-        UIManager.showSuccess('Entry submitted successfully!');
+        UIManager.showSuccess(`Entry submitted! ${symbol} @ ₹${price}`);
       }
-      
+
       // Reset form and close
       UIManager.hideEntryForm();
       isEditing = false;
-      
+
     } catch (error) {
       console.error('Error submitting entry:', error);
       UIManager.showError('Failed to submit entry. Please try again.');
