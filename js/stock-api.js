@@ -38,33 +38,47 @@ const StockAPI = (function() {
   }
   
   /**
-   * Search stocks dynamically
+   * Search stocks dynamically from Yahoo Finance API
+   * Returns REAL stocks from NSE/BSE, not hardcoded
    */
   async function searchStocks(query) {
     if (!query || query.length < 2) return [];
     
     try {
-      const apiUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+      // Yahoo Finance search/autocomplete API
+      const apiUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=15&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
       const url = CORS_PROXY + encodeURIComponent(apiUrl);
+      
+      console.log(`🔍 Searching for "${query}"...`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
       
       const response = await fetch(url, {
         method: 'GET',
-      }).catch(() => null);
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
       
       if (!response || !response.ok) {
+        console.warn('Search API failed');
         return [];
       }
       
       const data = await response.json();
       
       if (!data.quotes || data.quotes.length === 0) {
+        console.log(`No results found for "${query}"`);
         return [];
       }
       
+      // Filter for Indian stocks only (.NS for NSE, .BO for BSE)
       const stocks = data.quotes
         .filter(quote => {
           const symbol = quote.symbol || '';
-          return symbol.endsWith('.NS') || symbol.endsWith('.BO');
+          return (symbol.endsWith('.NS') || symbol.endsWith('.BO')) && 
+                 quote.quoteType === 'EQUITY'; // Only equity stocks
         })
         .map(quote => {
           const fullSymbol = quote.symbol;
@@ -83,15 +97,22 @@ const StockAPI = (function() {
             symbol: cleanSymbol,
             name: quote.longname || quote.shortname || cleanSymbol,
             exchange: exchange,
-            type: quote.quoteType || 'EQUITY'
+            type: quote.quoteType || 'EQUITY',
+            industry: quote.industry || '',
+            sector: quote.sector || ''
           };
         })
-        .slice(0, 8);
+        .slice(0, 10); // Limit to top 10 results
       
+      console.log(`✅ Found ${stocks.length} stocks for "${query}"`);
       return stocks;
       
     } catch (error) {
-      // Silently fail for search - it's not critical
+      if (error.name === 'AbortError') {
+        console.warn('Search timed out');
+      } else {
+        console.error('Search error:', error.message);
+      }
       return [];
     }
   }
