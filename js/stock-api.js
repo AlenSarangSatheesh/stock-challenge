@@ -1,26 +1,48 @@
 /**
- * Stock API Service
- * Fetches REAL stock prices ONLY - No mock data
+ * Stock API Service - CORS-Fixed Version
+ * Fetches REAL stock prices with CORS proxy
  */
 
 const StockAPI = (function() {
   
+  // CORS proxy options
+  const CORS_PROXIES = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+  ];
+  
+  let currentProxyIndex = 0;
+  
   /**
-   * Search stocks dynamically from Yahoo Finance API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} Matching stocks
+   * Get current CORS proxy
+   */
+  function getCorsProxy() {
+    return CORS_PROXIES[currentProxyIndex % CORS_PROXIES.length];
+  }
+  
+  /**
+   * Switch to next proxy on failure
+   */
+  function switchProxy() {
+    currentProxyIndex++;
+    console.log(`🔄 Switching to proxy ${currentProxyIndex % CORS_PROXIES.length + 1}`);
+  }
+  
+  /**
+   * Search stocks dynamically
    */
   async function searchStocks(query) {
     if (!query || query.length < 2) return [];
     
     try {
-      // Yahoo Finance autocomplete API
-      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0&quotesQueryId=tss_match_phrase_query`;
+      const proxy = getCorsProxy();
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
       
-      const response = await fetch(url);
+      const response = await fetch(proxy + encodeURIComponent(url), {
+        method: 'GET',
+      });
       
       if (!response.ok) {
-        console.warn('Yahoo Finance API request failed');
         return [];
       }
       
@@ -30,10 +52,8 @@ const StockAPI = (function() {
         return [];
       }
       
-      // Filter and format results - prioritize Indian stocks (.NS and .BO)
       const stocks = data.quotes
         .filter(quote => {
-          // Include stocks that end with .NS (NSE) or .BO (BSE)
           const symbol = quote.symbol || '';
           return symbol.endsWith('.NS') || symbol.endsWith('.BO');
         })
@@ -57,7 +77,7 @@ const StockAPI = (function() {
             type: quote.quoteType || 'EQUITY'
           };
         })
-        .slice(0, 8); // Limit to 8 results
+        .slice(0, 8);
       
       return stocks;
       
@@ -68,62 +88,69 @@ const StockAPI = (function() {
   }
 
   /**
-   * Fetch REAL stock price from Yahoo Finance - NO MOCK DATA
-   * @param {string} symbol - Stock symbol
-   * @param {string} exchange - Exchange (NSE/BSE)
-   * @returns {Promise<number>} Stock price (throws error if fails)
+   * Fetch stock price with CORS proxy
    */
   async function fetchStockPrice(symbol, exchange) {
-    try {
-      // For NSE stocks, add .NS suffix
-      // For BSE stocks, add .BO suffix
-      const suffix = exchange === 'NSE' ? '.NS' : '.BO';
-      const fullSymbol = symbol.toUpperCase() + suffix;
-      
-      console.log(`🔍 Fetching real price for ${fullSymbol}...`);
-      
-      // Using Yahoo Finance API
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`API returned status ${response.status}`);
+    const suffix = exchange === 'NSE' ? '.NS' : '.BO';
+    const fullSymbol = symbol.toUpperCase() + suffix;
+    
+    console.log(`🔍 Fetching price for ${fullSymbol}...`);
+    
+    // Try with CORS proxy
+    for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
+      try {
+        const proxy = getCorsProxy();
+        const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
+        const url = proxy + encodeURIComponent(apiUrl);
+        
+        console.log(`Attempt ${attempt + 1}: Using proxy ${currentProxyIndex % CORS_PROXIES.length + 1}`);
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.chart?.result?.[0]?.meta) {
+          throw new Error('Invalid data structure');
+        }
+        
+        const meta = data.chart.result[0].meta;
+        const price = meta.regularMarketPrice || meta.previousClose;
+        
+        if (!price || price <= 0) {
+          throw new Error('Invalid price value');
+        }
+        
+        const finalPrice = parseFloat(price.toFixed(2));
+        console.log(`✅ Price fetched: ${symbol} = ₹${finalPrice}`);
+        return finalPrice;
+        
+      } catch (error) {
+        console.warn(`⚠️ Proxy ${attempt + 1} failed: ${error.message}`);
+        switchProxy();
+        
+        // If last attempt, throw error
+        if (attempt === CORS_PROXIES.length - 1) {
+          throw new Error(
+            `Failed to fetch price for ${symbol} on ${exchange}. ` +
+            `Please verify: (1) Symbol is correct (2) Stock is actively traded (3) Try again in a moment. ` +
+            `Current price: Check manually on NSE/BSE website.`
+          );
+        }
       }
-      
-      const data = await response.json();
-      
-      // Check for valid data
-      if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-        throw new Error('No data returned from API');
-      }
-      
-      const result = data.chart.result[0];
-      
-      // Check if market is open and get latest price
-      const meta = result.meta;
-      const price = meta.regularMarketPrice || meta.previousClose;
-      
-      if (!price || price <= 0) {
-        throw new Error('Invalid price data');
-      }
-      
-      const finalPrice = parseFloat(price.toFixed(2));
-      console.log(`✅ Real price for ${symbol} (${exchange}): ₹${finalPrice}`);
-      
-      return finalPrice;
-      
-    } catch (error) {
-      console.error(`❌ Failed to fetch real price for ${symbol}:`, error.message);
-      throw new Error(`Could not fetch price for ${symbol}. Please check the stock symbol and try again.`);
     }
   }
 
   /**
-   * Validate if stock symbol exists and can fetch price
-   * @param {string} symbol - Stock symbol
-   * @param {string} exchange - Exchange (NSE/BSE)
-   * @returns {Promise<boolean>} True if valid
+   * Validate stock symbol
    */
   async function validateStock(symbol, exchange) {
     try {
