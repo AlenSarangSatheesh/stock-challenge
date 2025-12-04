@@ -119,6 +119,53 @@
       }
     });
   }
+  /**
+   * Initialize the application
+   * This function should be added to js/app.js after the setupStockAutocomplete() function
+   * and before the window.addEventListener('beforeunload') line
+   */
+  async function init() {
+    try {
+      console.log('🚀 Initializing Stock Challenge App...');
+
+      // 1. Initialize UI elements
+      UIManager.initElements();
+      console.log('✅ UI elements initialized');
+
+      // 2. Initialize Firebase
+      const firebaseInitialized = FirebaseService.init();
+      if (!firebaseInitialized) {
+        UIManager.showError('Failed to initialize Firebase. Please refresh the page.');
+        return;
+      }
+
+      // 3. Load user's entry from localStorage
+      loadMyEntry();
+      console.log('✅ User entry loaded');
+
+      // 4. Set up event listeners
+      setupEventListeners();
+      console.log('✅ Event listeners set up');
+
+      // 5. Set up stock autocomplete
+      setupStockAutocomplete();
+      console.log('✅ Stock autocomplete initialized');
+
+      // 6. Load participants from Firebase
+      await loadParticipants();
+      console.log('✅ Participants loaded');
+
+      // 7. Subscribe to real-time updates
+      subscribeToUpdates();
+      console.log('✅ Real-time updates subscribed');
+
+      console.log('✅ Stock Challenge App initialized successfully!');
+
+    } catch (error) {
+      console.error('❌ Error initializing app:', error);
+      UIManager.showError('Failed to initialize app. Please refresh the page.');
+    }
+  }
 
   
 
