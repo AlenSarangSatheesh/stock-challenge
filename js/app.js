@@ -9,36 +9,98 @@
   let myEntry = null; // Stored in localStorage: { id, name, symbol }
   let isEditing = false;
   let unsubscribe = null;
+  /**
+ * Setup stock autocomplete
+ */
+  function setupStockAutocomplete() {
+    const symbolInput = UIManager.elements.symbolInput;
+    const suggestionsDiv = document.getElementById('stock-suggestions');
+
+    if (!symbolInput || !suggestionsDiv) return;
+
+    let debounceTimer;
+
+    // Show suggestions on input
+    symbolInput.addEventListener('input', (e) => {
+      clearTimeout(debounceTimer);
+      const query = e.target.value.trim();
+
+      if (query.length < 1) {
+        suggestionsDiv.classList.remove('show');
+        return;
+      }
+
+      // Debounce search
+      debounceTimer = setTimeout(() => {
+        const results = StockAPI.searchStocks(query);
+
+        if (results.length === 0) {
+          suggestionsDiv.classList.remove('show');
+          return;
+        }
+
+        // Render suggestions
+        suggestionsDiv.innerHTML = results.map(stock => `
+        <div class="stock-suggestion-item" data-symbol="${stock.symbol}" data-exchange="${stock.exchange}">
+          <div>
+            <span class="stock-symbol">${stock.symbol}</span>
+            <span class="stock-exchange">${stock.exchange}</span>
+          </div>
+          <div class="stock-name">${stock.name}</div>
+        </div>
+      `).join('');
+
+        suggestionsDiv.classList.add('show');
+
+        // Add click handlers
+        suggestionsDiv.querySelectorAll('.stock-suggestion-item').forEach(item => {
+          item.addEventListener('click', () => {
+            symbolInput.value = item.dataset.symbol;
+            UIManager.elements.exchangeInput.value = item.dataset.exchange;
+            suggestionsDiv.classList.remove('show');
+            symbolInput.focus();
+          });
+        });
+      }, 300);
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!symbolInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+        suggestionsDiv.classList.remove('show');
+      }
+    });
+
+    // Hide on escape key
+    symbolInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        suggestionsDiv.classList.remove('show');
+      }
+    });
+  }
 
   /**
    * Initialize application
    */
   async function init() {
     console.log('🚀 Initializing Stock Challenge...');
-    
-    // Initialize UI elements
+
     UIManager.initElements();
-    
-    // Initialize Firebase
+
     const firebaseReady = FirebaseService.init();
-    
+
     if (!firebaseReady) {
       UIManager.showError('Failed to connect to database. Please refresh the page.');
       return;
     }
-    
-    // Load user's entry from localStorage
+
     loadMyEntry();
-    
-    // Set up event listeners
     setupEventListeners();
-    
-    // Load initial data
+    setupStockAutocomplete(); // Add this line
+
     await loadParticipants();
-    
-    // Subscribe to real-time updates
     subscribeToUpdates();
-    
+
     console.log('✅ Application initialized');
   }
 
@@ -124,18 +186,10 @@
   }
 
   /**
-   * Fetch stock price (mock implementation)
-   * Replace with real NSE/BSE API in production
-   */
+  * Fetch stock price using real API
+  */
   async function fetchStockPrice(symbol, exchange) {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const basePrice = MOCK_PRICES[symbol.toUpperCase()] || (Math.random() * 1000 + 500);
-        const variation = (Math.random() - 0.5) * APP_CONFIG.mockPriceVariation;
-        const price = +(basePrice * (1 + variation)).toFixed(2);
-        resolve(price);
-      }, APP_CONFIG.refreshDelay);
-    });
+    return await StockAPI.fetchStockPrice(symbol, exchange);
   }
 
   /**
