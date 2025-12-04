@@ -223,7 +223,21 @@
       }
       
       // Fetch stock price
-      const price = await fetchStockPrice(symbol, exchange);
+      // Fetch REAL stock price - no mock data
+      let price;
+      try {
+        price = await fetchStockPrice(symbol, exchange);
+        console.log(`✅ Successfully fetched price: ₹${price}`);
+      } catch (error) {
+        UIManager.showError(`Failed to fetch real price for ${symbol}. Please verify the stock symbol is correct and listed on ${exchange}.`);
+        return;
+      }
+
+      // Validate price
+      if (!price || price <= 0) {
+        UIManager.showError(`Invalid price returned for ${symbol}. Please try a different stock.`);
+        return;
+      }
       
       if (isEditing && myEntry) {
         // Update existing entry
@@ -303,46 +317,76 @@
   }
 
   /**
-   * Handle refresh prices
-   */
+ * Handle refresh prices
+ */
   async function handleRefreshPrices() {
     if (participants.length === 0) {
       UIManager.showError('No participants to refresh');
       return;
     }
-    
+
     try {
       UIManager.setRefreshLoading(true);
       UIManager.hideError();
-      
+
+      console.log('🔄 Refreshing prices for all participants...');
+
       // Fetch new prices for all participants
       const updatePromises = participants.map(async (p) => {
-        const newPrice = await fetchStockPrice(p.symbol, p.exchange);
-        const change = p.lastFridayPrice 
-          ? ((newPrice - p.lastFridayPrice) / p.lastFridayPrice) * 100 
-          : 0;
-        
-        return {
-          id: p.id,
-          cmp: newPrice,
-          change: +change.toFixed(2)
-        };
+        try {
+          const newPrice = await fetchStockPrice(p.symbol, p.exchange);
+          const change = p.lastFridayPrice
+            ? ((newPrice - p.lastFridayPrice) / p.lastFridayPrice) * 100
+            : 0;
+
+          console.log(`✅ ${p.symbol}: ₹${newPrice} (${change.toFixed(2)}%)`);
+
+          return {
+            id: p.id,
+            cmp: newPrice,
+            change: +change.toFixed(2),
+            success: true
+          };
+        } catch (error) {
+          console.error(`❌ Failed to fetch price for ${p.symbol}:`, error);
+          // Keep existing price if fetch fails
+          return {
+            id: p.id,
+            cmp: p.cmp || 0,
+            change: p.change || 0,
+            success: false
+          };
+        }
       });
-      
+
       const updates = await Promise.all(updatePromises);
-      
+
+      // Check if any prices were successfully fetched
+      const successCount = updates.filter(u => u.success).length;
+      if (successCount === 0) {
+        UIManager.showError('Failed to fetch prices for any stocks. Please check your internet connection.');
+        return;
+      }
+
       // Sort by change (descending) and assign ranks
       updates.sort((a, b) => b.change - a.change);
       const rankedUpdates = updates.map((update, index) => ({
         ...update,
         rank: index + 1
       }));
-      
+
       // Batch update in Firebase
       await FirebaseService.batchUpdateParticipants(rankedUpdates);
-      
-      UIManager.showSuccess('Prices refreshed successfully!');
-      
+
+      const failCount = updates.length - successCount;
+      if (failCount > 0) {
+        UIManager.showSuccess(`Prices refreshed! (${successCount} succeeded, ${failCount} failed)`);
+      } else {
+        UIManager.showSuccess('All prices refreshed successfully!');
+      }
+
+      console.log(`✅ Refresh complete: ${successCount}/${updates.length} stocks updated`);
+
     } catch (error) {
       console.error('Error refreshing prices:', error);
       UIManager.showError('Failed to refresh prices. Please try again.');
