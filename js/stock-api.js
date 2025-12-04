@@ -1,31 +1,40 @@
 /**
- * Stock API Service - CORS-Fixed Version
- * Fetches REAL stock prices with CORS proxy
+ * Stock API Service - Clean CORS-Fixed Version
+ * Fetches REAL stock prices with minimal console errors
  */
 
 const StockAPI = (function() {
   
-  // CORS proxy options
-  const CORS_PROXIES = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?',
-  ];
+  // Best working CORS proxy (prioritize the most reliable)
+  const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
   
-  let currentProxyIndex = 0;
+  // Cache for recent price fetches (avoid redundant API calls)
+  const priceCache = new Map();
+  const CACHE_DURATION = 60000; // 1 minute
   
   /**
-   * Get current CORS proxy
+   * Get cached price if available and fresh
    */
-  function getCorsProxy() {
-    return CORS_PROXIES[currentProxyIndex % CORS_PROXIES.length];
+  function getCachedPrice(symbol, exchange) {
+    const key = `${symbol}-${exchange}`;
+    const cached = priceCache.get(key);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log(`💾 Using cached price for ${symbol}: ₹${cached.price}`);
+      return cached.price;
+    }
+    return null;
   }
   
   /**
-   * Switch to next proxy on failure
+   * Cache a price
    */
-  function switchProxy() {
-    currentProxyIndex++;
-    console.log(`🔄 Switching to proxy ${currentProxyIndex % CORS_PROXIES.length + 1}`);
+  function cachePrice(symbol, exchange, price) {
+    const key = `${symbol}-${exchange}`;
+    priceCache.set(key, {
+      price: price,
+      timestamp: Date.now()
+    });
   }
   
   /**
@@ -35,14 +44,14 @@ const StockAPI = (function() {
     if (!query || query.length < 2) return [];
     
     try {
-      const proxy = getCorsProxy();
-      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+      const apiUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+      const url = CORS_PROXY + encodeURIComponent(apiUrl);
       
-      const response = await fetch(proxy + encodeURIComponent(url), {
+      const response = await fetch(url, {
         method: 'GET',
-      });
+      }).catch(() => null);
       
-      if (!response.ok) {
+      if (!response || !response.ok) {
         return [];
       }
       
@@ -82,70 +91,78 @@ const StockAPI = (function() {
       return stocks;
       
     } catch (error) {
-      console.error('Error searching stocks:', error);
+      // Silently fail for search - it's not critical
       return [];
     }
   }
 
   /**
-   * Fetch stock price with CORS proxy
+   * Fetch stock price with CORS proxy and caching
    */
   async function fetchStockPrice(symbol, exchange) {
+    // Check cache first
+    const cached = getCachedPrice(symbol, exchange);
+    if (cached !== null) {
+      return cached;
+    }
+    
     const suffix = exchange === 'NSE' ? '.NS' : '.BO';
     const fullSymbol = symbol.toUpperCase() + suffix;
     
     console.log(`🔍 Fetching price for ${fullSymbol}...`);
     
-    // Try with CORS proxy
-    for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
-      try {
-        const proxy = getCorsProxy();
-        const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
-        const url = proxy + encodeURIComponent(apiUrl);
-        
-        console.log(`Attempt ${attempt + 1}: Using proxy ${currentProxyIndex % CORS_PROXIES.length + 1}`);
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+    try {
+      const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
+      const url = CORS_PROXY + encodeURIComponent(apiUrl);
+      
+      // Use fetch with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
         }
-        
-        const data = await response.json();
-        
-        if (!data.chart?.result?.[0]?.meta) {
-          throw new Error('Invalid data structure');
-        }
-        
-        const meta = data.chart.result[0].meta;
-        const price = meta.regularMarketPrice || meta.previousClose;
-        
-        if (!price || price <= 0) {
-          throw new Error('Invalid price value');
-        }
-        
-        const finalPrice = parseFloat(price.toFixed(2));
-        console.log(`✅ Price fetched: ${symbol} = ₹${finalPrice}`);
-        return finalPrice;
-        
-      } catch (error) {
-        console.warn(`⚠️ Proxy ${attempt + 1} failed: ${error.message}`);
-        switchProxy();
-        
-        // If last attempt, throw error
-        if (attempt === CORS_PROXIES.length - 1) {
-          throw new Error(
-            `Failed to fetch price for ${symbol} on ${exchange}. ` +
-            `Please verify: (1) Symbol is correct (2) Stock is actively traded (3) Try again in a moment. ` +
-            `Current price: Check manually on NSE/BSE website.`
-          );
-        }
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
+      
+      const data = await response.json();
+      
+      if (!data.chart?.result?.[0]?.meta) {
+        throw new Error('Invalid data structure');
+      }
+      
+      const meta = data.chart.result[0].meta;
+      const price = meta.regularMarketPrice || meta.previousClose;
+      
+      if (!price || price <= 0) {
+        throw new Error('Invalid price value');
+      }
+      
+      const finalPrice = parseFloat(price.toFixed(2));
+      console.log(`✅ Price fetched: ${symbol} = ₹${finalPrice}`);
+      
+      // Cache the result
+      cachePrice(symbol, exchange, finalPrice);
+      
+      return finalPrice;
+      
+    } catch (error) {
+      console.error(`❌ Failed to fetch price for ${symbol}: ${error.message}`);
+      
+      // Provide helpful error message
+      throw new Error(
+        `Unable to fetch price for ${symbol} on ${exchange}. ` +
+        `Please verify the symbol is correct and actively traded. ` +
+        `If the issue persists, try again in a few moments.`
+      );
     }
   }
 
@@ -160,11 +177,20 @@ const StockAPI = (function() {
       return false;
     }
   }
+  
+  /**
+   * Clear price cache (useful for refresh)
+   */
+  function clearCache() {
+    priceCache.clear();
+    console.log('🧹 Price cache cleared');
+  }
 
   // Public API
   return {
     fetchStockPrice,
     searchStocks,
-    validateStock
+    validateStock,
+    clearCache
   };
 })();
