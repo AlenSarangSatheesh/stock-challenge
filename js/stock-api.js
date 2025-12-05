@@ -6,7 +6,7 @@
 const StockAPI = (function() {
   
   // CORS proxy to bypass CORS restrictions
-  const CORS_PROXY = 'https://corsproxy.io/?';
+  const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
   
   // Cache for prices (avoid repeated API calls)
   const priceCache = new Map();
