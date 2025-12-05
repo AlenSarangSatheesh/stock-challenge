@@ -51,29 +51,38 @@
         </div>
         <button id="close-form" class="btn-close-form">×</button>
       </div>
-
+    
       <form id="entry-form">
         <div class="grid">
+          <!-- Name Field -->
           <div>
             <label for="name">Your Name</label>
-            <input 
-              id="name" 
-              name="name" 
-              type="text" 
-              placeholder="Enter your name" 
-              required 
-              maxlength="50"
-            />
+            <input id="name" name="name" type="text" placeholder="Enter your name" required maxlength="50" />
           </div>
+    
+          <!-- Symbol Field -->
           <div>
             <label for="symbol">Stock Symbol</label>
-            <input id="symbol" name="symbol" type="text" placeholder="Enter stock symbol (e.g., reliance, TCS, infy)" required
-              maxlength="20" autocomplete="off" />
+            <div class="stock-input-wrapper">
+              <input id="symbol" name="symbol" type="text" placeholder="e.g., RELIANCE, TCS, INFY" required maxlength="20"
+                autocomplete="off" />
+              <div id="stock-suggestions" class="stock-suggestions"></div>
+            </div>
             <small style="display: block; color: #6b7280; font-size: 12px; margin-top: 4px;">
               Type in any case - RELIANCE, reliance, or Reliance all work
             </small>
           </div>
-
+    
+          <!-- Exchange Field - THIS WAS MISSING! -->
+          <div>
+            <label for="exchange">Exchange</label>
+            <select id="exchange" name="exchange">
+              <option value="NSE">NSE</option>
+              <option value="BSE">BSE</option>
+            </select>
+          </div>
+        </div>
+    
         <div class="form-actions">
           <button id="submit-btn" class="btn" type="submit">
             Submit Entry
