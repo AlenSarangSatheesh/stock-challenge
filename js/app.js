@@ -18,107 +18,7 @@
  * with this complete version
  */
 
-  function setupStockAutocomplete() {
-    const symbolInput = UIManager.elements.symbolInput;
-    const suggestionsDiv = document.getElementById('stock-suggestions');
-
-    if (!symbolInput || !suggestionsDiv) return;
-
-    let debounceTimer;
-
-    // Show suggestions on input
-    symbolInput.addEventListener('input', async (e) => {
-      clearTimeout(debounceTimer);
-      const query = e.target.value.trim();
-
-      if (query.length < 2) {
-        suggestionsDiv.classList.remove('show');
-        return;
-      }
-
-      // Show loading state
-      suggestionsDiv.innerHTML = '<div class="stock-suggestions-loading">🔍 Searching...</div>';
-      suggestionsDiv.classList.add('show');
-
-      // Debounce search - wait for user to stop typing
-      debounceTimer = setTimeout(async () => {
-        try {
-          console.log(`Searching for: "${query}"`);
-
-          // Fetch real results from API
-          const results = await StockAPI.searchStocks(query);
-
-          // Ignore if user has typed something else
-          if (symbolInput.value.trim() !== query) return;
-
-          if (results.length === 0) {
-            suggestionsDiv.innerHTML = `
-            <div class="stock-suggestions-empty">
-              No stocks found for "${query}".<br>
-              <small>Try searching by company name or symbol</small>
-            </div>
-          `;
-            return;
-          }
-
-          // Render suggestions with detailed info
-          suggestionsDiv.innerHTML = results.map(stock => `
-          <div class="stock-suggestion-item" 
-               data-symbol="${stock.symbol}" 
-               data-exchange="${stock.exchange}">
-            <div class="stock-suggestion-header">
-              <div>
-                <span class="stock-symbol">${stock.symbol}</span>
-                <span class="stock-exchange">${stock.exchange}</span>
-              </div>
-            </div>
-            <span class="stock-name">${stock.name}</span>
-            ${stock.industry ? `<span class="stock-industry">📊 ${stock.industry}</span>` : ''}
-          </div>
-        `).join('');
-
-          // Add click handlers to each suggestion
-          suggestionsDiv.querySelectorAll('.stock-suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
-              symbolInput.value = item.dataset.symbol;
-              UIManager.elements.exchangeInput.value = item.dataset.exchange;
-              suggestionsDiv.classList.remove('show');
-              symbolInput.focus();
-            });
-          });
-
-        } catch (error) {
-          console.error('Search failed:', error);
-          suggestionsDiv.innerHTML = `
-          <div class="stock-suggestions-empty">
-            ⚠️ Search failed. Please try again.
-          </div>
-        `;
-        }
-      }, 400); // Wait 400ms after user stops typing
-    });
-
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!symbolInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-        suggestionsDiv.classList.remove('show');
-      }
-    });
-
-    // Hide on escape key
-    symbolInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        suggestionsDiv.classList.remove('show');
-      }
-    });
-
-    // Show suggestions again on focus if there's text
-    symbolInput.addEventListener('focus', () => {
-      if (symbolInput.value.trim().length >= 2) {
-        suggestionsDiv.classList.add('show');
-      }
-    });
-  }
+  
   /**
    * Initialize the application
    * This function should be added to js/app.js after the setupStockAutocomplete() function
@@ -147,9 +47,7 @@
       setupEventListeners();
       console.log('✅ Event listeners set up');
 
-      // 5. Set up stock autocomplete
-      setupStockAutocomplete();
-      console.log('✅ Stock autocomplete initialized');
+      
 
       // 6. Load participants from Firebase
       await loadParticipants();

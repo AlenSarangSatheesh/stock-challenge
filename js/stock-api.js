@@ -1,6 +1,6 @@
 /**
- * Stock API Service - Simple Price Fetching Only
- * Users type symbols manually, we fetch real prices
+ * Stock API Service - Real Price Fetching Only
+ * No search autocomplete - users type symbols manually
  */
 
 const StockAPI = (function() {
@@ -54,7 +54,7 @@ const StockAPI = (function() {
     console.log(`🔍 Fetching real price for ${fullSymbol}...`);
     
     try {
-      // Direct Yahoo Finance API call (no CORS proxy needed for chart endpoint)
+      // Direct Yahoo Finance API call
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
       
       const controller = new AbortController();
