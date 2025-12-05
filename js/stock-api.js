@@ -1,9 +1,12 @@
 /**
- * Stock API Service - Real Price Fetching Only
+ * Stock API Service - Real Price Fetching with CORS Proxy
  * No search autocomplete - users type symbols manually
  */
 
 const StockAPI = (function() {
+  
+  // CORS proxy to bypass CORS restrictions
+  const CORS_PROXY = 'https://corsproxy.io/?';
   
   // Cache for prices (avoid repeated API calls)
   const priceCache = new Map();
@@ -35,7 +38,7 @@ const StockAPI = (function() {
   }
   
   /**
-   * Fetch REAL stock price from Yahoo Finance
+   * Fetch REAL stock price from Yahoo Finance via CORS proxy
    * Accepts symbols in any case (converts to uppercase)
    */
   async function fetchStockPrice(symbol, exchange) {
@@ -54,11 +57,12 @@ const StockAPI = (function() {
     console.log(`🔍 Fetching real price for ${fullSymbol}...`);
     
     try {
-      // Direct Yahoo Finance API call
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
+      // Yahoo Finance API URL with CORS proxy
+      const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${fullSymbol}?interval=1d&range=1d`;
+      const url = CORS_PROXY + encodeURIComponent(apiUrl);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
       const response = await fetch(url, {
         method: 'GET',
@@ -78,7 +82,7 @@ const StockAPI = (function() {
       
       // Validate response
       if (!data.chart?.result?.[0]?.meta) {
-        throw new Error('Invalid API response');
+        throw new Error('Invalid API response - stock may not exist');
       }
       
       const meta = data.chart.result[0].meta;
@@ -87,7 +91,7 @@ const StockAPI = (function() {
       const price = meta.regularMarketPrice || meta.previousClose;
       
       if (!price || price <= 0) {
-        throw new Error('Invalid price value');
+        throw new Error('Invalid price value returned');
       }
       
       const finalPrice = parseFloat(price.toFixed(2));
@@ -108,8 +112,10 @@ const StockAPI = (function() {
         errorMsg += 'Request timed out. Please try again.';
       } else if (error.message.includes('404')) {
         errorMsg += 'Stock not found. Please verify the symbol is correct.';
+      } else if (error.message.includes('Invalid API response')) {
+        errorMsg += 'Stock not found or invalid symbol. Please check: 1) Symbol spelling (e.g., RELIANCE not RELIACE), 2) Stock is listed on ' + exchange;
       } else {
-        errorMsg += 'Please check: 1) Symbol is correct, 2) Stock is listed on ' + exchange + ', 3) Market might be closed.';
+        errorMsg += 'Please check: 1) Symbol is correct (e.g., RELIANCE, TCS, INFY), 2) Stock is listed on ' + exchange + ', 3) Your internet connection';
       }
       
       throw new Error(errorMsg);
